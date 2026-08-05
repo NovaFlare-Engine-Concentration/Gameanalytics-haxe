@@ -69,9 +69,7 @@ class GameAnalytics {
 
     public static function init(?customUserId:String):Void {
         if (instance != null) {
-            #if GAMEANALYTICS_VERBOSE
             trace("[GameAnalytics] already initialized");
-            #end
             return;
         }
         instance = new GameAnalytics(customUserId);
@@ -382,10 +380,8 @@ class GameAnalytics {
     function loadOrCreateUserId():String {
         #if (sys || cpp || neko || hl || java)
         try {
-            var dir:String = getStorageDir();
-            var path:String = dir + "/" + USER_ID_FILE;
-            if (FileSystem.exists(path)) {
-                var content:String = StringTools.trim(File.getContent(path));
+            if (FileSystem.exists(USER_ID_FILE)) {
+                var content:String = StringTools.trim(File.getContent(USER_ID_FILE));
                 if (content.length > 0) return content;
             }
         } catch (_:Dynamic) {}
@@ -398,9 +394,7 @@ class GameAnalytics {
     function saveUserId(id:String):Void {
         #if (sys || cpp || neko || hl || java)
         try {
-            var dir:String = getStorageDir();
-            if (!FileSystem.exists(dir)) FileSystem.createDirectory(dir);
-            File.saveContent(dir + "/" + USER_ID_FILE, id);
+            File.saveContent(USER_ID_FILE, id);
         } catch (_:Dynamic) {}
         #end
     }
@@ -409,15 +403,12 @@ class GameAnalytics {
         var value:Int = 0;
         #if (sys || cpp || neko || hl || java)
         try {
-            var dir:String = getStorageDir();
-            var path:String = dir + "/" + SESSION_NUM_FILE;
-            if (FileSystem.exists(path)) {
-                var parsed:Null<Int> = Std.parseInt(StringTools.trim(File.getContent(path)));
+            if (FileSystem.exists(SESSION_NUM_FILE)) {
+                var parsed:Null<Int> = Std.parseInt(StringTools.trim(File.getContent(SESSION_NUM_FILE)));
                 if (parsed != null && parsed > 0) value = parsed;
             }
             value++;
-            if (!FileSystem.exists(dir)) FileSystem.createDirectory(dir);
-            File.saveContent(path, Std.string(value));
+            File.saveContent(SESSION_NUM_FILE, Std.string(value));
         } catch (_:Dynamic) {
             value++;
         }
@@ -425,16 +416,6 @@ class GameAnalytics {
         value = 1;
         #end
         return value;
-    }
-
-    function getStorageDir():String {
-        #if (lime && lime_system)
-        return lime.system.System.applicationStorageDirectory;
-        #elseif sys
-        return Sys.getCwd();
-        #else
-        return ".";
-        #end
     }
 
     // ------------------------------------------------------------------
