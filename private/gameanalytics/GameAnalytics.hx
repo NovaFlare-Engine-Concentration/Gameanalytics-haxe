@@ -38,9 +38,13 @@ class GameAnalytics {
     static var FLUSH_INTERVAL_SEC:Float = 10.0;
     static var MAX_RETRIES:Int = 3;
     static var SDK_VERSION:String = "rest api v2";
-    static var USER_ID_FILE:String = ".ga_user_id";
-    static var SESSION_NUM_FILE:String = ".ga_session_num";
+    static var USER_ID_FILE:String = ".ga_user_id_v2";
+    static var SESSION_NUM_FILE:String = ".ga_session_num_v2";
+    static var LEGACY_USER_ID_FILE:String = ".ga_user_id";
+    static var LEGACY_SESSION_NUM_FILE:String = ".ga_session_num";
     static var diagnosticsEnabled:Bool = runtimeDiagnosticsEnabled();
+    static var uuidCounter:Int = 0;
+    static inline var UUID_HEX_CHARS:String = "0123456789abcdef";
 
     static function runtimeDiagnosticsEnabled():Bool {
         if (GameAnalyticsConfig.VERBOSE_LOGGING) return true;
@@ -104,6 +108,8 @@ class GameAnalytics {
     // ------------------------------------------------------------------
 
     function new(?customUserId:String) {
+        clearPersistedIdentityFiles();
+
         gameKey = GameAnalyticsConfig.GAME_KEY;
         secretKey = GameAnalyticsConfig.SECRET_KEY;
         build = GameAnalyticsConfig.BUILD_VERSION;
@@ -418,19 +424,69 @@ class GameAnalytics {
         return value;
     }
 
+    function clearPersistedIdentityFiles():Void {
+        #if (sys || cpp || neko || hl || java)
+        deleteIdentityFileIfExists(LEGACY_USER_ID_FILE);
+        deleteIdentityFileIfExists(LEGACY_SESSION_NUM_FILE);
+        #end
+    }
+
+    static function deleteIdentityFileIfExists(path:String):Void {
+        #if (sys || cpp || neko || hl || java)
+        try {
+            if (path != null && path.length > 0 && FileSystem.exists(path)) {
+                FileSystem.deleteFile(path);
+            }
+        } catch (_:Dynamic) {}
+        #end
+    }
+
     // ------------------------------------------------------------------
     // Internal — UUID v4
     // ------------------------------------------------------------------
 
     function generateUUID():String {
-        var hex:String = "0123456789abcdef";
-        var uuid:String = "";
+        uuidCounter++;
+        var entropy:String = Date.now().getTime()
+            + "|"
+            + Math.random()
+            + "|"
+            + uuidCounter
+            + "|"
+            + Math.floor(Math.random() * 0x7fffffff);
+        var hash:String = Sha256.encode(entropy);
+        var hashIndex:Int = 0;
+        var uuid:StringBuf = new StringBuf();
+
         for (i in 0...36) {
-            if (i == 8 || i == 13 || i == 18 || i == 23) uuid += "-";
-            else if (i == 14) uuid += "4";
-            else if (i == 19) uuid += hex.charAt(8 + Std.random(4));
-            else uuid += hex.charAt(Std.random(16));
+            if (i == 8 || i == 13 || i == 18 || i == 23) {
+                uuid.add("-");
+                continue;
+            }
+
+            var nibble:Int;
+            if (i == 14) {
+                nibble = 4;
+            } else if (i == 19) {
+                nibble = (hexToInt(hash.charAt(hashIndex)) & 3) | 8;
+                hashIndex++;
+            } else {
+                nibble = hexToInt(hash.charAt(hashIndex));
+                hashIndex++;
+            }
+            uuid.add(UUID_HEX_CHARS.charAt(nibble));
         }
-        return uuid;
+        return uuid.toString();
+    }
+
+    static inline function hexToInt(ch:String):Int {
+        var code:Int = ch.charCodeAt(0);
+        return if (code >= 48 && code <= 57) {
+            code - 48;
+        } else if (code >= 97 && code <= 102) {
+            code - 87;
+        } else {
+            0;
+        };
     }
 }
